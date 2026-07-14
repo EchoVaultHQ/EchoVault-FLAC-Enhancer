@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "baseUrl": "https://github.com/ACS-lessgo/echovault-flac-enhancer/releases/download/v0.1.0",
+  "baseUrl": "https://github.com/EchoVaultHQ/EchoVault-FLAC-Enhancer/releases/download/v0.1.0",
   "model": {
     "file": "model.onnx",
     "sha256": "b08db07825ebb164a927e9ef50dc5e566d1c13c0515af039fc2350b7a523c379",
