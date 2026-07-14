@@ -2,7 +2,8 @@
 
 Standalone CLI for bulk-enhancing lossy audio (MP3/AAC/OGG/WMA) to FLAC using
 the same ONNX model EchoVault's desktop app uses, independent of Electron.
-The model itself is from
+
+- The model itself is from :
 [rohan-prasen/audioreconstruction](https://github.com/rohan-prasen/audioreconstruction).
 
 ## Install
