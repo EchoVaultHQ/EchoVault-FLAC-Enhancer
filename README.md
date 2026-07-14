@@ -58,7 +58,32 @@ pytest -m "not slow"   # add -m slow to also run real network/model tests
 
 ## Releasing
 
+### Model assets (once per model version)
+
 Before `--setup` works for end users, a maintainer must create a GitHub
 Release on this repo and upload `model.onnx` + `config.json` as release
 assets, matching the URL/hashes pinned in
-`echovault_flac_enhancer/data/manifest.json`.
+`echovault_flac_enhancer/data/manifest.json`. Verify locally before
+uploading:
+
+```bash
+sha256sum model.onnx config.json   # compare against manifest.json's sha256/bytes
+```
+
+If the release tag doesn't match `manifest.json`'s `baseUrl`, update
+`baseUrl` and commit — every installed CLI resolves the download from
+that field.
+
+### Package (PyPI)
+
+Publishing is handled by `.github/workflows/publish.yml` via PyPI
+Trusted Publishing (OIDC — no stored token), tied to the `pypi`
+GitHub Actions environment.
+
+- **Normal path**: bump the version in `pyproject.toml` and
+  `CHANGELOG.md`, commit, then publish a GitHub Release for that tag.
+  The `release: published` event triggers the workflow automatically.
+- **One-off / manual path**: Actions tab → **Publish** workflow →
+  **Run workflow** → branch `main`. Useful when the version has no
+  release of its own yet (e.g. it already shares a tag with a
+  model-asset release).
