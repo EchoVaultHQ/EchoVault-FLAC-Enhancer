@@ -28,6 +28,13 @@ echovault-flac-enhancer --file-name path/to/track.mp3
 
 ![echovault-flac-enhancer --file-name output](screenshots/single_file.png)
 
+Spectrogram before (MP3) and after (enhanced FLAC) — note the recovered
+high-frequency content above the MP3's cutoff:
+
+| Before (MP3) | After (enhanced FLAC) |
+| --- | --- |
+| ![MP3 spectrogram](screenshots/mp3.png) | ![Enhanced FLAC spectrogram](screenshots/flac.png) |
+
 ```bash
 # Enhance every lossy track in a folder
 echovault-flac-enhancer --folder path/to/music [--recursive] [--skip-existing] [--output-dir DIR]
