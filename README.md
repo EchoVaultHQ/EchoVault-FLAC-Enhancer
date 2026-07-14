@@ -17,13 +17,23 @@ echovault-flac-enhancer --setup
 
 # Check runtime/deps/model status
 echovault-flac-enhancer --check
+```
 
+![echovault-flac-enhancer --check output](screenshots/check_model_status.png)
+
+```bash
 # Enhance a single file
 echovault-flac-enhancer --file-name path/to/track.mp3
+```
 
+![echovault-flac-enhancer --file-name output](screenshots/single_file.png)
+
+```bash
 # Enhance every lossy track in a folder
 echovault-flac-enhancer --folder path/to/music [--recursive] [--skip-existing] [--output-dir DIR]
 ```
+
+![echovault-flac-enhancer --folder output](screenshots/batch_folder.png)
 
 Outputs are written as `<original-stem>.enhanced.flac` alongside the source
 (or under `--output-dir`, mirroring the source's relative subpath).
