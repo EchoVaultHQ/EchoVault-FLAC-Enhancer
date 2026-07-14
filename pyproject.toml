@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "echovault-flac-enhancer"
+version = "0.1.0"
+description = "Standalone CLI for batch-enhancing lossy audio to FLAC via EchoVault's ONNX model"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+dependencies = [
+  "onnxruntime==1.20.1",
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "soundfile>=0.13.1",
+  "mutagen>=1.47",
+  "tqdm>=4.66",
+  "platformdirs>=4.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-mock", "ruff", "black", "build"]
+
+[project.scripts]
+echovault-flac-enhancer = "echovault_flac_enhancer.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["echovault_flac_enhancer"]
+
+[tool.pytest.ini_options]
+markers = ["slow: real network/model tests, excluded by default"]
+addopts = "-m 'not slow'"
+
+[tool.black]
+extend-exclude = "echovault_flac_enhancer/inference.py"
+
+[tool.ruff]
+extend-exclude = ["echovault_flac_enhancer/inference.py"]

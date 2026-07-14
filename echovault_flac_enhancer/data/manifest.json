@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "baseUrl": "https://github.com/ACS-lessgo/echovault-flac-enhancer/releases/download/v0.1.0",
+  "model": {
+    "file": "model.onnx",
+    "sha256": "b08db07825ebb164a927e9ef50dc5e566d1c13c0515af039fc2350b7a523c379",
+    "bytes": 112608277
+  },
+  "config": {
+    "file": "config.json",
+    "sha256": "5368dceb6297a20fb1ea3768ffc132585776a2edc173c0e164d8ce1bc871425a",
+    "bytes": 280
+  }
+}
