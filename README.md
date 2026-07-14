@@ -33,6 +33,19 @@ The model (~107MB) is cached at:
 - Linux/macOS: `~/.cache/echovault-flac-enhancer/model/`
 - Windows: `%LOCALAPPDATA%\echovault-flac-enhancer\model\`
 
+## Development
+
+```bash
+git clone https://github.com/EchoVaultHQ/EchoVault-FLAC-Enhancer.git
+cd EchoVault-FLAC-Enhancer
+python -m venv .venv && source .venv/bin/activate
+pip install -e .[dev]
+
+ruff check .
+black --check .
+pytest -m "not slow"   # add -m slow to also run real network/model tests
+```
+
 ## Non-goals (v1)
 
 - No GUI — CLI only.
