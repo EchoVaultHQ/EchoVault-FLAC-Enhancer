@@ -37,6 +37,9 @@ def test_success(fake_inference_script, tmp_path):
     assert result.success
     assert result.output_path == tmp_path / "out.flac"
     assert progresses == [50, 100]
+    assert result.elapsed_seconds is not None
+    assert result.input_bytes == len(b"fake-mp3")
+    assert result.output_bytes == len(b"fake-flac-bytes")
 
 
 def test_model_not_found(fake_inference_script, tmp_path):

@@ -142,15 +142,19 @@ def _fetch_asset(
     base_url: str,
     entry: ManifestEntry,
     dest: Path,
-    on_progress: Callable[[str, int, str], None],
+    on_progress: Callable[[str, int, int], None],
 ) -> None:
     url = f"{base_url}/{entry.file}"
 
     def attempt() -> None:
         downloaded = 0
-        download_to(
-            url, dest, lambda n: on_progress(entry.file, downloaded + n, entry.bytes)
-        )
+
+        def on_chunk(n: int) -> None:
+            nonlocal downloaded
+            downloaded += n
+            on_progress(entry.file, downloaded, entry.bytes)
+
+        download_to(url, dest, on_chunk)
 
     _with_retry(attempt)
 
@@ -166,7 +170,7 @@ def _fetch_asset(
 
 
 def ensure_model_assets(
-    on_progress: Callable[[str, int, str], None] = lambda *a: None,
+    on_progress: Callable[[str, int, int], None] = lambda *a: None,
 ) -> ModelPaths:
     manifest = load_manifest()
     d = cache_dir()

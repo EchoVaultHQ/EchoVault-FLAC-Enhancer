@@ -76,6 +76,8 @@ def test_run_batch_continues_after_failure(
     assert len(summary.failed) == 1
     assert summary.failed[0][0] == bad
     assert summary.failed[0][1] == "MODEL_NOT_FOUND"
+    assert len(summary.results) == 2
+    assert sum(1 for r in summary.results if r.success) == 1
 
 
 def test_run_batch_skip_existing(fake_inference_script, tmp_path):

@@ -1,83 +1,66 @@
-"""argparse CLI surface: --folder/--file-name/--setup/--check."""
+"""Typer CLI surface: `enhance file`, `enhance folder`, `setup`, `check`."""
 
 from __future__ import annotations
 
-import argparse
-import sys
 from pathlib import Path
+from typing import Optional
 
-from tqdm import tqdm
+import typer
 
-from . import batch, model_manager
+from . import __version__, batch, model_manager, ui
+
+app = typer.Typer(no_args_is_help=True, add_completion=False)
+enhance_app = typer.Typer(no_args_is_help=True)
+app.add_typer(enhance_app, name="enhance", help="Enhance lossy audio to FLAC")
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="echovault-flac-enhancer")
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument(
-        "--folder", type=Path, help="Enhance all lossy tracks in a folder"
-    )
-    mode.add_argument("--file-name", type=Path, help="Enhance a single track")
-    mode.add_argument(
-        "--setup",
-        action="store_true",
-        help="Download/verify the model and run a self-test",
-    )
-    mode.add_argument(
-        "--check",
-        action="store_true",
-        help="Report runtime/deps/model/self-test status",
-    )
+def _version_callback(value: bool) -> None:
+    if value:
+        ui.console.print(f"echovault-flac-enhancer {__version__}")
+        raise typer.Exit()
 
-    parser.add_argument(
-        "--recursive", action="store_true", help="Walk subfolders (only with --folder)"
+
+@app.callback()
+def _main(
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show the version and exit.",
     )
-    parser.add_argument(
-        "--workers", type=int, default=1, help="Parallel workers (v1: must be 1)"
-    )
-    parser.add_argument(
-        "--skip-existing",
-        action="store_true",
-        help="Skip files with an existing enhanced output",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=None,
-        help="Write outputs here instead of alongside sources",
-    )
-    return parser
+) -> None:
+    """Enhance lossy audio (MP3/AAC/OGG/WMA) to FLAC via EchoVault's ONNX model."""
 
 
 def _cmd_setup() -> int:
-    def on_progress(name: str, done: int, total: int) -> None:
-        pct = round(done / total * 100) if total else 0
-        print(f"Downloading {name}: {pct}%", end="\r")
+    with ui.build_file_progress() as progress:
+        task = progress.add_task("Downloading model assets", total=100)
 
-    print("Downloading model assets...")
-    paths = model_manager.ensure_model_assets(on_progress)
-    print("\nRunning self-test...")
+        def on_progress(name: str, done: int, total: int) -> None:
+            progress.update(
+                task,
+                description=f"Downloading {name}",
+                total=total or 100,
+                completed=done,
+            )
+
+        paths = model_manager.ensure_model_assets(on_progress)
+
+    ui.console.print("Running self-test...")
     inference_script = model_manager.inference_script_path()
     if model_manager.run_self_test(
         inference_script, paths.model_path, paths.config_path
     ):
-        print("SELF-TEST PASS")
+        ui.console.print("[bold green]Self-test passed[/bold green]")
         return 0
-    print("SELF-TEST FAILED", file=sys.stderr)
+    ui.error_console.print("[bold red]Self-test failed[/bold red]")
     return 1
 
 
 def _cmd_check() -> int:
     status = model_manager.check_status()
-    print("Dependencies:")
-    for name, version in status["deps"].items():
-        print(f"  {name}: {version if version else 'MISSING'}")
-    print(
-        f"Model:  ok={status['model']['ok']}  ({status['model']['reason']})  {status['model']['path']}"
-    )
-    print(
-        f"Config: ok={status['config']['ok']}  ({status['config']['reason']})  {status['config']['path']}"
-    )
+    ui.render_check_status(status)
     return (
         0
         if status["model"]["ok"]
@@ -87,95 +70,123 @@ def _cmd_check() -> int:
     )
 
 
-def _print_summary(summary: batch.BatchSummary) -> None:
-    print(
-        f"\nSucceeded: {len(summary.succeeded)}  Skipped: {len(summary.skipped)}  Failed: {len(summary.failed)}"
-    )
-    for path, code, message in summary.failed:
-        print(f"  FAILED {path}: {code} {message}")
-
-
-def _cmd_file(args: argparse.Namespace) -> int:
+def _cmd_file(input_path: Path, output_dir: Optional[Path]) -> int:
     paths = model_manager.ensure_model_assets()
     inference_script = model_manager.inference_script_path()
-    input_path: Path = args.file_name
-    output_path = batch.output_path_for(input_path, input_path.parent, args.output_dir)
+    output_path = batch.output_path_for(input_path, input_path.parent, output_dir)
 
-    with tqdm(total=100, desc=input_path.name) as bar:
-
-        def on_progress(pct: int) -> None:
-            bar.n = pct
-            bar.refresh()
-
+    with ui.build_file_progress() as progress:
+        task = progress.add_task(input_path.name, total=100)
         result = batch.run_single_file(
             inference_script,
             paths.model_path,
             paths.config_path,
             input_path,
             output_path,
-            on_progress,
+            on_progress=lambda pct: progress.update(task, completed=pct),
         )
 
     if result.success:
-        print(f"DONE {result.output_path}")
+        ui.render_file_success(result)
         return 0
-    print(f"ERROR {result.error_code} {result.error_message}", file=sys.stderr)
-    return {"MODEL_NOT_FOUND": 3, "INPUT_READ_FAILED": 2, "ORT_INIT_FAILED": 4}.get(
-        result.error_code, 1
-    )
+    ui.render_error(result.error_code, result.error_message)
+    return batch.ERROR_EXIT_CODES.get(result.error_code or "GENERIC", 1)
 
 
-def _cmd_folder(args: argparse.Namespace) -> int:
-    if args.workers > 1:
-        print(
-            "ERROR: parallel workers not implemented yet — v2. Use --workers 1.",
-            file=sys.stderr,
+def _cmd_folder(
+    folder: Path,
+    recursive: bool,
+    workers: int,
+    skip_existing: bool,
+    output_dir: Optional[Path],
+) -> int:
+    if workers > 1:
+        ui.error_console.print(
+            "[bold red]Parallel workers aren't implemented yet (v2). Use --workers 1.[/bold red]"
         )
         return 1
 
-    folder: Path = args.folder
-    files = batch.resolve_files(folder, args.recursive)
+    files = batch.resolve_files(folder, recursive)
     if not files:
-        print("No lossy tracks found.")
+        ui.console.print("No lossy tracks found.")
         return 0
 
     paths = model_manager.ensure_model_assets()
     inference_script = model_manager.inference_script_path()
 
-    outer = tqdm(total=len(files), position=0, desc="Batch")
-    inner = tqdm(total=100, position=1, leave=False)
+    with ui.build_batch_progress() as progress:
+        outer = progress.add_task("Batch", total=len(files))
+        inner = progress.add_task("", total=100)
+        seen_idx = 0
 
-    def on_file_progress(path: Path, idx: int, total: int, pct: int) -> None:
-        outer.set_postfix_str(f"Track {idx}/{total}")
-        inner.n = pct
-        inner.refresh()
+        def on_file_progress(path: Path, idx: int, total: int, pct: int) -> None:
+            nonlocal seen_idx
+            if idx != seen_idx:
+                if seen_idx:
+                    progress.update(outer, advance=1)
+                progress.reset(inner, total=100)
+                progress.update(inner, description=path.name)
+                seen_idx = idx
+            progress.update(inner, completed=pct)
 
-    summary = batch.run_batch(
-        files,
-        folder,
-        paths.model_path,
-        paths.config_path,
-        inference_script,
-        args.output_dir,
-        args.skip_existing,
-        on_file_progress=on_file_progress,
-    )
-    for _ in files:
-        outer.update(1)
-        inner.reset()
-    outer.close()
-    inner.close()
+        summary = batch.run_batch(
+            files,
+            folder,
+            paths.model_path,
+            paths.config_path,
+            inference_script,
+            output_dir,
+            skip_existing,
+            on_file_progress=on_file_progress,
+        )
+        progress.update(outer, completed=len(files))
 
-    _print_summary(summary)
+    ui.render_batch_summary(summary)
     return 0 if not summary.failed else 1
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    if args.setup:
-        return _cmd_setup()
-    if args.check:
-        return _cmd_check()
-    if args.file_name:
-        return _cmd_file(args)
-    return _cmd_folder(args)
+@enhance_app.command("file")
+def enhance_file(
+    path: Path = typer.Argument(..., exists=True, file_okay=True, dir_okay=False),
+    output_dir: Optional[Path] = typer.Option(
+        None, "--output-dir", help="Write output here instead of alongside the source"
+    ),
+) -> None:
+    """Enhance a single track."""
+    raise typer.Exit(code=_cmd_file(path, output_dir))
+
+
+@enhance_app.command("folder")
+def enhance_folder(
+    path: Path = typer.Argument(..., exists=True, file_okay=False, dir_okay=True),
+    recursive: bool = typer.Option(False, "--recursive", help="Walk subfolders"),
+    workers: int = typer.Option(
+        1, "--workers", help="Parallel workers (v1: must be 1)"
+    ),
+    skip_existing: bool = typer.Option(
+        False, "--skip-existing", help="Skip files with an existing enhanced output"
+    ),
+    output_dir: Optional[Path] = typer.Option(
+        None, "--output-dir", help="Write outputs here instead of alongside sources"
+    ),
+) -> None:
+    """Enhance all lossy tracks in a folder."""
+    raise typer.Exit(
+        code=_cmd_folder(path, recursive, workers, skip_existing, output_dir)
+    )
+
+
+@app.command()
+def setup() -> None:
+    """Download/verify the model and run a self-test."""
+    raise typer.Exit(code=_cmd_setup())
+
+
+@app.command()
+def check() -> None:
+    """Report runtime/deps/model/self-test status."""
+    raise typer.Exit(code=_cmd_check())
+
+
+def main() -> None:
+    app()

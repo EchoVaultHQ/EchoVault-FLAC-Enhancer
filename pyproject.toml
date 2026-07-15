@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "echovault-flac-enhancer"
-version = "0.1.1"
+version = "0.2.0"
 description = "Standalone CLI for batch-enhancing lossy audio to FLAC via EchoVault's ONNX model"
 readme = "README.md"
 license = "MIT"
@@ -15,7 +15,8 @@ dependencies = [
   "scipy>=1.11",
   "soundfile>=0.13.1",
   "mutagen>=1.47",
-  "tqdm>=4.66",
+  "typer>=0.12",
+  "rich>=13.7",
   "platformdirs>=4.0",
 ]
 

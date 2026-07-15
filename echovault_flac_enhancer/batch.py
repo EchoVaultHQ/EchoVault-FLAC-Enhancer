@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Callable, NamedTuple
 
@@ -28,12 +29,17 @@ EXIT_CODE_FALLBACK = {
     4: "ORT_INIT_FAILED",
 }
 
+ERROR_EXIT_CODES = {code: rc for rc, code in EXIT_CODE_FALLBACK.items()}
+
 
 class InferenceResult(NamedTuple):
     success: bool
     output_path: Path | None
     error_code: str | None
     error_message: str | None
+    elapsed_seconds: float | None = None
+    input_bytes: int | None = None
+    output_bytes: int | None = None
 
 
 def run_single_file(
@@ -44,6 +50,7 @@ def run_single_file(
     output_path: Path,
     on_progress: Callable[[int], None] = lambda pct: None,
 ) -> InferenceResult:
+    start = time.perf_counter()
     proc = subprocess.Popen(
         [
             sys.executable,
@@ -83,6 +90,7 @@ def run_single_file(
 
     returncode = proc.wait()
     stderr_thread.join()
+    elapsed = time.perf_counter() - start
 
     if returncode == 0:
         if done_path is not None and done_path != output_path:
@@ -91,7 +99,13 @@ def run_single_file(
                 file=sys.stderr,
             )
         return InferenceResult(
-            success=True, output_path=output_path, error_code=None, error_message=None
+            success=True,
+            output_path=output_path,
+            error_code=None,
+            error_message=None,
+            elapsed_seconds=elapsed,
+            input_bytes=input_path.stat().st_size,
+            output_bytes=output_path.stat().st_size,
         )
 
     error_code = None
@@ -109,6 +123,7 @@ def run_single_file(
         output_path=None,
         error_code=error_code,
         error_message=error_message,
+        elapsed_seconds=elapsed,
     )
 
 
@@ -139,6 +154,7 @@ class BatchSummary(NamedTuple):
     succeeded: list[Path]
     skipped: list[Path]
     failed: list[tuple[Path, str, str]]  # (input_path, error_code, message)
+    results: list[InferenceResult]
 
 
 def run_batch(
@@ -154,6 +170,7 @@ def run_batch(
     succeeded: list[Path] = []
     skipped: list[Path] = []
     failed: list[tuple[Path, str, str]] = []
+    results: list[InferenceResult] = []
 
     for i, input_path in enumerate(files, start=1):
         out_path = output_path_for(input_path, source_root, output_dir)
@@ -171,6 +188,7 @@ def run_batch(
                 files
             ), p=input_path: on_file_progress(p, idx, total, pct),
         )
+        results.append(result)
         if result.success:
             succeeded.append(input_path)
         else:
@@ -178,4 +196,6 @@ def run_batch(
                 (input_path, result.error_code or "GENERIC", result.error_message or "")
             )
 
-    return BatchSummary(succeeded=succeeded, skipped=skipped, failed=failed)
+    return BatchSummary(
+        succeeded=succeeded, skipped=skipped, failed=failed, results=results
+    )

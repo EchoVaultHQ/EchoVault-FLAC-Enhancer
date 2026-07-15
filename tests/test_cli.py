@@ -1,25 +1,37 @@
-import pytest
+from typer.testing import CliRunner
 
-from echovault_flac_enhancer import cli, model_manager
+from echovault_flac_enhancer import __version__, cli, model_manager
 
-
-def test_mutually_exclusive_modes_required():
-    parser = cli.build_parser()
-    with pytest.raises(SystemExit):
-        parser.parse_args([])
+runner = CliRunner()
 
 
-def test_mutually_exclusive_modes_conflict():
-    parser = cli.build_parser()
-    with pytest.raises(SystemExit):
-        parser.parse_args(["--folder", "x", "--file-name", "y"])
+def test_no_args_shows_help():
+    result = runner.invoke(cli.app, [])
+    assert "enhance" in result.stdout
 
 
-def test_workers_greater_than_one_errors(tmp_path, capsys):
-    args = cli.build_parser().parse_args(["--folder", str(tmp_path), "--workers", "2"])
-    rc = cli._cmd_folder(args)
+def test_version_flag():
+    result = runner.invoke(cli.app, ["--version"])
+    assert result.exit_code == 0
+    assert __version__ in result.stdout
+
+
+def test_enhance_file_rejects_nonexistent_path(tmp_path):
+    missing = tmp_path / "does-not-exist.mp3"
+    result = runner.invoke(cli.app, ["enhance", "file", str(missing)])
+    assert result.exit_code != 0
+
+
+def test_enhance_folder_rejects_a_file_path(tmp_path):
+    a_file = tmp_path / "track.mp3"
+    a_file.write_bytes(b"fake")
+    result = runner.invoke(cli.app, ["enhance", "folder", str(a_file)])
+    assert result.exit_code != 0
+
+
+def test_workers_greater_than_one_errors(tmp_path):
+    rc = cli._cmd_folder(tmp_path, False, 2, False, None)
     assert rc == 1
-    assert "not implemented" in capsys.readouterr().err
 
 
 def test_check_reports_failure_when_model_missing(

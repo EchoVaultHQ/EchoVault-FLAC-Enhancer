@@ -99,6 +99,34 @@ def test_download_to_follows_redirect_then_downloads(tmp_path, monkeypatch):
     assert sum(received) == len(b"real-bytes")
 
 
+def test_fetch_asset_reports_cumulative_bytes(tmp_path, fake_manifest, monkeypatch):
+    chunks = [b"x" * 4, b"y" * 4, b"z" * 8]  # sums to fake_manifest.model.bytes == 16
+
+    def fake_download_to(url, dest, on_bytes, redirects_left=5):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with open(dest, "wb") as f:
+            for chunk in chunks:
+                f.write(chunk)
+                on_bytes(len(chunk))
+
+    monkeypatch.setattr(model_manager, "download_to", fake_download_to)
+    monkeypatch.setattr(
+        model_manager,
+        "verify_asset",
+        lambda path, entry: (True, "ok"),
+    )
+
+    seen: list[int] = []
+    model_manager._fetch_asset(
+        "https://example.invalid",
+        fake_manifest.model,
+        tmp_path / "model.onnx",
+        lambda name, done, total: seen.append(done),
+    )
+
+    assert seen == [4, 8, 16]
+
+
 def test_ensure_model_assets_retries_once_then_raises(
     tmp_path, fake_cache_dir, fake_manifest, monkeypatch
 ):
